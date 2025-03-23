@@ -160,6 +160,8 @@ Adding auto-play preview functionality as users scroll through content is a powe
    - Bandwidth-aware playback decisions
 
 
+```bash
+
 ############### IOS  Start
 
 // AutoPlayVideoManager.swift - Handles auto-play preview functionality for iOS
@@ -1975,5 +1977,4 @@ module.exports = {
   deletePreview
 };
 
-################# previewGenerationService end ################# 
 
