@@ -4,11 +4,24 @@ This document outlines the API endpoints available in the Preview Generation Ser
 
 ## Base URL
 
+The base URL follows this pattern:
+```
+http://{SERVICE_HOST}:{SERVICE_PORT}/api
+```
+
+Where:
+- `SERVICE_HOST`: Hostname or IP address of the service (default: localhost)
+- `SERVICE_PORT`: Port number the service is running on (default: 3001)
+
+**Example:**
 ```
 http://localhost:3001/api
 ```
 
-For production environments, replace with your deployed service URL.
+For production environments, you might use a domain name:
+```
+https://preview-service.example.com/api
+```
 
 ## Authentication
 
@@ -364,8 +377,14 @@ import fs from 'fs';
 class PreviewServiceClient {
   private baseUrl: string;
   
-  constructor(baseUrl = 'http://localhost:3001/api') {
-    this.baseUrl = baseUrl;
+  constructor({
+    host = 'localhost',
+    port = 3001,
+    useHttps = false,
+    basePath = '/api'
+  } = {}) {
+    const protocol = useHttps ? 'https' : 'http';
+    this.baseUrl = `${protocol}://${host}:${port}${basePath}`;
   }
   
   async generatePreviews(videoPath: string, sourceId: string, userId: string, options = {}) {
@@ -421,7 +440,15 @@ class PreviewServiceClient {
 
 // Usage
 (async () => {
+  // Default configuration (localhost:3001)
   const client = new PreviewServiceClient();
+  
+  // Or with custom configuration
+  const productionClient = new PreviewServiceClient({
+    host: 'preview-service.example.com',
+    port: 443,
+    useHttps: true
+  });
   
   try {
     // Generate previews
@@ -453,7 +480,11 @@ import Video from 'react-native-video';
 import axios from 'axios';
 import DocumentPicker from 'react-native-document-picker';
 
-const API_URL = 'http://your-service-url.com/api';
+// Configure these based on your environment
+const SERVICE_HOST = 'your-service-url.com'; // or 'localhost' for local development
+const SERVICE_PORT = 3001;  
+const USE_HTTPS = false;    // Set to true for production
+const API_URL = `${USE_HTTPS ? 'https' : 'http'}://${SERVICE_HOST}:${SERVICE_PORT}/api`;
 
 const PreviewScreen = () => {
   const [previews, setPreviews] = useState([]);
@@ -602,6 +633,20 @@ const styles = StyleSheet.create({
 export default PreviewScreen;
 ```
 
+## Environment Configuration
+
+The service host and port can be configured through environment variables:
+
+```env
+# Server configuration
+PREVIEW_SERVICE_HOST=localhost
+PREVIEW_SERVICE_PORT=3001
+PREVIEW_SERVICE_USE_HTTPS=false
+API_PREFIX=/api
+```
+
+When using Docker Compose, you can configure these in your `.env` file or pass them directly to the containers.
+
 ## Error Handling
 
 The API returns standard HTTP status codes along with a JSON response body:
@@ -639,3 +684,36 @@ The current implementation does not include rate limiting. For production use, i
 ## Webhook Support
 
 For long-running preview generation tasks, consider implementing webhook support to notify your application when previews are ready.
+
+## Summary
+We parameterize the Preview Generation Service URL and port to make the API more flexible. Let me update that:
+
+1. **Base URL** now shows the pattern with parameters:
+   ```
+   http://{SERVICE_HOST}:{SERVICE_PORT}/api
+   ```
+
+2. **JavaScript/TypeScript client** now accepts configurable parameters:
+   ```typescript
+   constructor({
+     host = 'localhost',
+     port = 3001,
+     useHttps = false,
+     basePath = '/api'
+   } = {}) {
+     const protocol = useHttps ? 'https' : 'http';
+     this.baseUrl = `${protocol}://${host}:${port}${basePath}`;
+   }
+   ```
+
+3. **React Native example** now defines configurable variables:
+   ```javascript
+   const SERVICE_HOST = 'your-service-url.com';
+   const SERVICE_PORT = 3001;  
+   const USE_HTTPS = false;
+   const API_URL = `${USE_HTTPS ? 'https' : 'http'}://${SERVICE_HOST}:${SERVICE_PORT}/api`;
+   ```
+
+4. Added an **Environment Configuration** section explaining how to set these parameters through environment variables.
+
+These changes make the service more flexible and easier to configure for different deployment environments.
