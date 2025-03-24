@@ -41,7 +41,7 @@ Generates preview clips from an uploaded video file.
 
 | Field         | Type   | Required | Description                                             |
 |---------------|--------|----------|---------------------------------------------------------|
-| source        | File   | Yes      | Video file to generate previews from                    |
+| source        | File   | Yes      | Video file to generate previews from (.mp4, .webm only) |
 | sourceId      | String | Yes      | Unique identifier for the source video                  |
 | userId        | String | Yes      | User identifier owning the previews                     |
 | previewCount  | Number | No       | Number of previews to generate (default: 3)             |
@@ -76,21 +76,24 @@ curl -X POST \
         "sourceId": "video-123",
         "startTime": 0,
         "duration": 5,
-        "position": "beginning"
+        "position": "beginning",
+        "userFolder": "user-456/previews"
       },
       {
         "previewId": "550e8400-e29b-41d4-a716-446655440001",
         "sourceId": "video-123",
         "startTime": 30,
         "duration": 5,
-        "position": "middle"
+        "position": "middle",
+        "userFolder": "user-456/previews"
       },
       {
         "previewId": "550e8400-e29b-41d4-a716-446655440002",
         "sourceId": "video-123",
         "startTime": 55,
         "duration": 5,
-        "position": "end"
+        "position": "end",
+        "userFolder": "user-456/previews"
       }
     ]
   }
@@ -180,6 +183,7 @@ curl -X GET http://localhost:3001/api/preview/source/video-123
         "width": 640,
         "height": 360,
         "format": "mp4",
+        "userFolder": "user-456/previews",
         "previewUrl": "http://localhost:3001/api/preview/550e8400-e29b-41d4-a716-446655440000/stream",
         "thumbnailUrl": "http://localhost:3001/api/preview/550e8400-e29b-41d4-a716-446655440000/thumbnail"
       },
@@ -192,6 +196,7 @@ curl -X GET http://localhost:3001/api/preview/source/video-123
         "width": 640,
         "height": 360,
         "format": "mp4",
+        "userFolder": "user-456/previews",
         "previewUrl": "http://localhost:3001/api/preview/550e8400-e29b-41d4-a716-446655440001/stream",
         "thumbnailUrl": "http://localhost:3001/api/preview/550e8400-e29b-41d4-a716-446655440001/thumbnail"
       }
@@ -233,6 +238,7 @@ curl -X GET http://localhost:3001/api/preview/550e8400-e29b-41d4-a716-4466554400
     "width": 640,
     "height": 360,
     "format": "mp4",
+    "userFolder": "user-456/previews",
     "previewUrl": "http://localhost:3001/api/preview/550e8400-e29b-41d4-a716-446655440000/stream",
     "thumbnailUrl": "http://localhost:3001/api/preview/550e8400-e29b-41d4-a716-446655440000/thumbnail"
   }
@@ -281,6 +287,27 @@ curl -X GET http://localhost:3001/api/preview/550e8400-e29b-41d4-a716-4466554400
 **Response:**
 Binary image data with content type image/jpeg
 
+### Download Preview File
+
+Downloads a preview file securely.
+
+**Endpoint:** `GET /preview/:previewId/download`
+
+**URL Parameters:**
+
+| Parameter | Type   | Required | Description              |
+|-----------|--------|----------|--------------------------|
+| previewId | String | Yes      | Identifier of the preview |
+
+**Example Request:**
+
+```bash
+curl -X GET http://localhost:3001/api/preview/550e8400-e29b-41d4-a716-446655440000/download
+```
+
+**Response:**
+Binary file data with appropriate content type based on file extension
+
 ### Delete Preview
 
 Deletes a specific preview and its associated files.
@@ -307,27 +334,6 @@ curl -X DELETE http://localhost:3001/api/preview/550e8400-e29b-41d4-a716-4466554
   "message": "Preview 550e8400-e29b-41d4-a716-446655440000 deleted successfully"
 }
 ```
-
-### Serve File from Storage
-
-Serves a file directly from storage.
-
-**Endpoint:** `GET /preview/file/:filePath(*)`
-
-**URL Parameters:**
-
-| Parameter | Type   | Required | Description              |
-|-----------|--------|----------|--------------------------|
-| filePath  | String | Yes      | Path to file in storage  |
-
-**Example Request:**
-
-```bash
-curl -X GET http://localhost:3001/api/preview/file/previews/550e8400-e29b-41d4-a716-446655440000.mp4
-```
-
-**Response:**
-Binary file data with appropriate content type
 
 ### Service Health Check
 
@@ -432,6 +438,10 @@ class PreviewServiceClient {
     return `${this.baseUrl}/preview/${previewId}/thumbnail`;
   }
   
+  getPreviewDownloadUrl(previewId: string) {
+    return `${this.baseUrl}/preview/${previewId}/download`;
+  }
+  
   async checkHealth() {
     const response = await axios.get(`${this.baseUrl}/health`);
     return response.data;
@@ -516,6 +526,14 @@ const PreviewScreen = () => {
       });
       
       const video = result[0];
+      
+      // Check for supported formats
+      const fileExtension = video.name.split('.').pop().toLowerCase();
+      if (!['mp4', 'webm'].includes(fileExtension)) {
+        alert('Unsupported format. Please select an MP4 or WebM file.');
+        return;
+      }
+      
       setLoading(true);
       
       // Create form data
@@ -643,9 +661,28 @@ PREVIEW_SERVICE_HOST=localhost
 PREVIEW_SERVICE_PORT=3001
 PREVIEW_SERVICE_USE_HTTPS=false
 API_PREFIX=/api
+
+# Storage settings
+ALLOW_S3_BUCKET_CREATE=false  # Set to 'true' only in development
 ```
 
 When using Docker Compose, you can configure these in your `.env` file or pass them directly to the containers.
+
+## S3 Key Structure Convention
+
+All files stored by the service follow this structure:
+
+```
+{userId}/previews/{previewId}.{format}
+```
+
+Example:
+```
+user-123/previews/550e8400-e29b-41d4-a716-446655440000.mp4
+user-123/previews/550e8400-e29b-41d4-a716-446655440000_thumb.jpg
+```
+
+Each user's content is isolated in their own folder to maintain separation and security.
 
 ## Error Handling
 
@@ -681,39 +718,21 @@ The API returns standard HTTP status codes along with a JSON response body:
 
 The current implementation does not include rate limiting. For production use, implement rate limiting to prevent abuse.
 
+## Concurrency Control
+
+Preview generation is limited to processing 3 concurrent preview extractions to prevent CPU/memory spikes.
+
 ## Webhook Support
 
 For long-running preview generation tasks, consider implementing webhook support to notify your application when previews are ready.
 
-## Summary
-We parameterize the Preview Generation Service URL and port to make the API more flexible. Let me update that:
+## Summary of Changes
 
-1. **Base URL** now shows the pattern with parameters:
-   ```
-   http://{SERVICE_HOST}:{SERVICE_PORT}/api
-   ```
+The API documentation now reflects the latest enhancements:
 
-2. **JavaScript/TypeScript client** now accepts configurable parameters:
-   ```typescript
-   constructor({
-     host = 'localhost',
-     port = 3001,
-     useHttps = false,
-     basePath = '/api'
-   } = {}) {
-     const protocol = useHttps ? 'https' : 'http';
-     this.baseUrl = `${protocol}://${host}:${port}${basePath}`;
-   }
-   ```
-
-3. **React Native example** now defines configurable variables:
-   ```javascript
-   const SERVICE_HOST = 'your-service-url.com';
-   const SERVICE_PORT = 3001;  
-   const USE_HTTPS = false;
-   const API_URL = `${USE_HTTPS ? 'https' : 'http'}://${SERVICE_HOST}:${SERVICE_PORT}/api`;
-   ```
-
-4. Added an **Environment Configuration** section explaining how to set these parameters through environment variables.
-
-These changes make the service more flexible and easier to configure for different deployment environments.
+1. **Secure File Access**: Removed insecure file path endpoint and added secure `/preview/:previewId/download` endpoint
+2. **Input Format Validation**: Specified supported formats (.mp4, .webm) in request parameters
+3. **User Folder Structure**: Added userFolder field to response examples
+4. **S3 Key Structure**: Added documentation on the structure convention
+5. **Enhanced Environment Configuration**: Added ALLOW_S3_BUCKET_CREATE variable
+6. **Concurrency Control**: Added notes about the limitation on concurrent processing
